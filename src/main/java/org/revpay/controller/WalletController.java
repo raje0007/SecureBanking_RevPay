@@ -7,9 +7,8 @@ import java.math.BigDecimal;
 import java.util.Scanner;
 
 /**
- * WalletController is a CLASS (not interface, not annotation, not exception).
  *
- * Handles wallet menu interaction.
+ * Handles wallet menu interaction safely with proper exception handling.
  */
 public class WalletController {
 
@@ -32,52 +31,101 @@ public class WalletController {
             System.out.println("4. Back");
             System.out.print("Choose option: ");
 
-            int choice = Integer.parseInt(scanner.nextLine());
+            try {
 
-            switch (choice) {
+                int choice = Integer.parseInt(scanner.nextLine());
 
-                case 1 -> checkBalance(user);
+                switch (choice) {
 
-                case 2 -> addMoney(user);
+                    case 1 -> checkBalance(user);
 
-                case 3 -> withdrawMoney(user);
+                    case 2 -> addMoney(user);
 
-                case 4 -> { return; }
+                    case 3 -> withdrawMoney(user);
 
-                default -> System.out.println("Invalid choice.");
+                    case 4 -> {
+                        return;
+                    }
+
+                    default -> System.out.println("Invalid choice.");
+                }
+
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Please enter a number.");
             }
         }
     }
 
     private void checkBalance(User user) {
 
-        BigDecimal balance = walletService.getBalance(user.getId());
-        System.out.println("Your current balance is: ₹ " + balance);
+        try {
+
+            BigDecimal balance =
+                    walletService.getBalance(user.getId());
+
+            System.out.println("Your current balance is: ₹ " + balance);
+
+        } catch (Exception e) {
+
+            System.out.println("Error fetching balance: " + e.getMessage());
+        }
     }
 
     private void addMoney(User user) {
 
-        System.out.print("Enter amount: ");
-        BigDecimal amount = new BigDecimal(scanner.nextLine());
+        try {
 
-        System.out.print("Enter transaction PIN: ");
-        String pin = scanner.nextLine();
+            System.out.print("Enter amount: ");
+            BigDecimal amount =
+                    new BigDecimal(scanner.nextLine());
 
-        walletService.addMoney(user.getId(), amount, pin);
+            System.out.print("Enter transaction PIN: ");
+            String pin = scanner.nextLine();
 
-        System.out.println("Money added successfully.");
+            walletService.addMoney(user.getId(), amount, pin);
+
+            System.out.println("Money added successfully.");
+
+        } catch (NumberFormatException e) {
+
+            System.out.println("Invalid amount format.");
+
+        } catch (RuntimeException e) {
+
+            System.out.println("Error: " + e.getMessage());
+
+        } catch (Exception e) {
+
+            System.out.println("Unexpected error occurred.");
+        }
     }
 
     private void withdrawMoney(User user) {
 
-        System.out.print("Enter amount: ");
-        BigDecimal amount = new BigDecimal(scanner.nextLine());
+        try {
 
-        System.out.print("Enter transaction PIN: ");
-        String pin = scanner.nextLine();
+            System.out.print("Enter amount: ");
+            BigDecimal amount =
+                    new BigDecimal(scanner.nextLine());
 
-        walletService.withdrawMoney(user.getId(), amount, pin);
+            System.out.print("Enter transaction PIN: ");
+            String pin = scanner.nextLine();
 
-        System.out.println("Money withdrawn successfully.");
+            walletService.withdrawMoney(user.getId(), amount, pin);
+
+            System.out.println("Money withdrawn successfully.");
+
+        } catch (NumberFormatException e) {
+
+            System.out.println("Invalid amount format.");
+
+        } catch (RuntimeException e) {
+
+            System.out.println("Error: " + e.getMessage());
+
+        } catch (Exception e) {
+
+            System.out.println("Unexpected error occurred.");
+        }
     }
 }

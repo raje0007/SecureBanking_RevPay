@@ -3,6 +3,7 @@ package org.revpay.service;
 import org.revpay.config.DBConnection;
 import org.revpay.dao.UserDAO;
 import org.revpay.dao.impl.UserDAOImpl;
+import org.revpay.exception.InsufficientBalanceException;
 import org.revpay.model.User;
 
 import java.math.BigDecimal;
@@ -15,11 +16,11 @@ import java.util.Optional;
 /**
  * WalletService is a CLASS (not interface, not annotation, not exception).
  *
- * Handles wallet-related business logic:
+ * Handles:
  * - Add money
  * - Withdraw money
- * - Check balance
- * - Send notifications
+ * - Balance check
+ * - Low balance alert
  */
 public class WalletService {
 
@@ -36,9 +37,9 @@ public class WalletService {
         this.notificationService = new NotificationService();
     }
 
-    /**
-     * Add money to wallet
-     */
+    // =========================
+    // Add Money
+    // =========================
     public void addMoney(Long userId,
                          BigDecimal amount,
                          String transactionPin) {
@@ -46,33 +47,26 @@ public class WalletService {
         validateAmount(amount);
 
         User user = getUserOrThrow(userId);
-
         authService.validateTransactionPin(user, transactionPin);
 
         try (Connection connection = DBConnection.getConnection()) {
 
             connection.setAutoCommit(false);
 
-            try {
+            try (PreparedStatement ps =
+                         connection.prepareStatement(
+                                 "UPDATE users SET balance = balance + ? WHERE id = ?")) {
 
-                String sql =
-                        "UPDATE users SET balance = balance + ? WHERE id = ?";
-
-                try (PreparedStatement ps =
-                             connection.prepareStatement(sql)) {
-
-                    ps.setBigDecimal(1, amount);
-                    ps.setLong(2, userId);
-                    ps.executeUpdate();
-                }
+                ps.setBigDecimal(1, amount);
+                ps.setLong(2, userId);
+                ps.executeUpdate();
 
                 connection.commit();
 
                 notificationService.sendNotification(
                         userId,
                         "Wallet Credited",
-                        "₹" + amount +
-                                " has been added to your wallet.",
+                        "₹" + amount + " has been added to your wallet.",
                         "WALLET"
                 );
 
@@ -82,14 +76,13 @@ public class WalletService {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException(
-                    "Failed to add money.", e);
+            throw new RuntimeException("Failed to add money.", e);
         }
     }
 
-    /**
-     * Withdraw money from wallet
-     */
+    // =========================
+    // Withdraw Money
+    // =========================
     public void withdrawMoney(Long userId,
                               BigDecimal amount,
                               String transactionPin) {
@@ -97,51 +90,39 @@ public class WalletService {
         validateAmount(amount);
 
         User user = getUserOrThrow(userId);
-
         authService.validateTransactionPin(user, transactionPin);
 
         try (Connection connection = DBConnection.getConnection()) {
 
             connection.setAutoCommit(false);
 
-            try {
+            BigDecimal currentBalance = getBalance(userId);
 
-                String sql =
-                        "UPDATE users SET balance = balance - ? " +
-                                "WHERE id = ? AND balance >= ?";
+            if (currentBalance.compareTo(amount) < 0) {
+                throw new InsufficientBalanceException(
+                        "Insufficient balance. Current balance: ₹" + currentBalance);
+            }
 
-                int affectedRows;
+            try (PreparedStatement ps =
+                         connection.prepareStatement(
+                                 "UPDATE users SET balance = balance - ? WHERE id = ?")) {
 
-                try (PreparedStatement ps =
-                             connection.prepareStatement(sql)) {
-
-                    ps.setBigDecimal(1, amount);
-                    ps.setLong(2, userId);
-                    ps.setBigDecimal(3, amount);
-
-                    affectedRows = ps.executeUpdate();
-                }
-
-                if (affectedRows == 0) {
-                    throw new RuntimeException(
-                            "Insufficient balance.");
-                }
+                ps.setBigDecimal(1, amount);
+                ps.setLong(2, userId);
+                ps.executeUpdate();
 
                 connection.commit();
+
+                BigDecimal newBalance = currentBalance.subtract(amount);
 
                 notificationService.sendNotification(
                         userId,
                         "Wallet Debited",
-                        "₹" + amount +
-                                " has been deducted from your wallet.",
+                        "₹" + amount + " deducted. Remaining balance: ₹" + newBalance,
                         "WALLET"
                 );
 
-                BigDecimal newBalance = getBalance(userId);
-
-                if (newBalance.compareTo(
-                        LOW_BALANCE_THRESHOLD) < 0) {
-
+                if (newBalance.compareTo(LOW_BALANCE_THRESHOLD) < 0) {
                     notificationService.sendNotification(
                             userId,
                             "Low Balance Alert",
@@ -156,23 +137,19 @@ public class WalletService {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException(
-                    "Failed to withdraw money.", e);
+            throw new RuntimeException("Failed to withdraw money.", e);
         }
     }
 
-    /**
-     * Get current wallet balance
-     */
+    // =========================
+    // Get Balance
+    // =========================
     public BigDecimal getBalance(Long userId) {
 
-        String sql =
-                "SELECT balance FROM users WHERE id = ?";
-
-        try (Connection connection =
-                     DBConnection.getConnection();
+        try (Connection connection = DBConnection.getConnection();
              PreparedStatement ps =
-                     connection.prepareStatement(sql)) {
+                     connection.prepareStatement(
+                             "SELECT balance FROM users WHERE id = ?")) {
 
             ps.setLong(1, userId);
 
@@ -183,8 +160,7 @@ public class WalletService {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException(
-                    "Failed to fetch balance.", e);
+            throw new RuntimeException("Failed to fetch balance.", e);
         }
 
         throw new RuntimeException("User not found.");
@@ -195,24 +171,16 @@ public class WalletService {
     // =========================
 
     private void validateAmount(BigDecimal amount) {
-
-        if (amount == null ||
-                amount.compareTo(BigDecimal.ZERO) <= 0) {
-
-            throw new RuntimeException(
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
                     "Amount must be greater than zero.");
         }
     }
 
     private User getUserOrThrow(Long userId) {
+        Optional<User> optional = userDAO.findById(userId);
 
-        Optional<User> optional =
-                userDAO.findById(userId);
-
-        if (optional.isEmpty()) {
-            throw new RuntimeException("User not found.");
-        }
-
-        return optional.get();
+        return optional.orElseThrow(
+                () -> new RuntimeException("User not found."));
     }
 }
