@@ -32,7 +32,7 @@ public class User {
     private LocalDateTime lastLoginAt;
 
 
-    // Business-specific fields (nullable for personal accounts)
+    // Business-specific fields
     private String businessName;
     private String businessType;
     private String taxId;
@@ -64,9 +64,9 @@ public class User {
         this.updatedAt = LocalDateTime.now();
     }
 
-    // =========================
+
     // Getters and Setters
-    // =========================
+
 
 
 
@@ -279,9 +279,9 @@ public class User {
         this.updatedAt = java.time.LocalDateTime.now();
     }
 
-    // =========================
+
     // Business Fields
-    // =========================
+
 
     public String getBusinessName() {
         return businessName;
@@ -305,9 +305,9 @@ public class User {
         this.updatedAt = LocalDateTime.now();
     }
 
-    // =========================
+
     // Utility Methods
-    // =========================
+
 
     public boolean isAccountLocked() {
         return this.accountStatus == AccountStatus.LOCKED;
